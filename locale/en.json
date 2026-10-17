@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Session Manager",
+    "description": "Manage every session from the Web UI: delete with a recoverable trash (restore or purge), restore archived sessions, activity stats, continue or pause a run, open the log folder, unread markers, fork into a new chat, workspace grouping and ordering, and a global context compaction threshold."
+  }
+}
