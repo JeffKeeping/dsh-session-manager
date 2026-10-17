@@ -1,6 +1,6 @@
 {
   "name": "dsh-session-manager",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Full session management for the DSH web UI: delete with a recoverable trash (restore/purge), force delete for foreign session ids, restore archived sessions, activity stats, continue/pause, fork, unread markers, log folders, workspace grouping, and a global context compaction threshold. Native DSH dialogs, no harness changes.",
   "type": "module",
   "main": "lib/index.js",
@@ -28,7 +28,8 @@
     "README.en.md",
     "CHANGELOG.md",
     "LICENSE",
-    "market-submission"
+    "market-submission",
+    "assets"
   ],
   "scripts": {
     "build": "tsdown && tsc -p tsconfig.json",

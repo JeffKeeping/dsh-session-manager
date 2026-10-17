@@ -27,7 +27,7 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionId as WireSessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { WorkspaceView } from '@deepseek-ai/dsh-api-remotes/client'
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
-import { Button, Modal, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, MenuItemButton, Modal, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createElement, Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactElement } from 'react'
 import { createPortal } from 'react-dom'
 import {
@@ -626,7 +626,6 @@ const STYLE = `
   color: var(--dsw-alias-label-tertiary, #9ca3af);
   font-weight: 400;
 }
-[data-dsh-delete-current],
 [data-dsh-header-button] {
   align-items: center;
   appearance: none;
@@ -647,17 +646,9 @@ const STYLE = `
   padding: 6px 12px;
   white-space: nowrap;
 }
-[data-dsh-delete-current] {
-  border-color: rgba(220, 38, 38, .45);
-  color: rgb(220, 38, 38);
-}
-[data-dsh-delete-current]:hover:not(:disabled) {
-  background: rgba(239, 68, 68, .1);
-}
 [data-dsh-header-button]:hover:not(:disabled) {
   background: var(--dsw-alias-interactive-bg-hover, rgba(127, 127, 127, .1));
 }
-[data-dsh-delete-current]:disabled,
 [data-dsh-header-button]:disabled {
   color: var(--dsw-alias-label-dimmed, #9ca3af);
   cursor: wait;
@@ -1247,6 +1238,17 @@ async function postActionResult(route: string, payload: Record<string, unknown>)
     body: JSON.stringify(payload),
   })
   return (await response.json().catch(() => ({}))) as ActionResultResponse
+}
+
+/**
+ * Re-pull the official session list after a Session left the client mirror.
+ * The slot `inject:` scopes do not expose the session store, so `apply()`
+ * parks the root-scoped store here once at mount time.
+ */
+let sessionStoreForRefresh: { refresh?: () => Promise<unknown> } | undefined
+
+function sessionsRefresh(): Promise<unknown> {
+  return Promise.resolve(sessionStoreForRefresh?.refresh?.()).catch(() => undefined)
 }
 
 function SessionManager({ useSessions, useWorkspaces, api, sessions, workspaceActions, close }: SessionManagerProps): ReactElement {
@@ -2344,6 +2346,9 @@ export function apply(ctx: ClientContext): void {
     get: (target, key, receiver) => (key === 'open' ? openSessionCompat : Reflect.get(target, key, receiver)),
   }) as ISessions
   const workspaces = ctx.workspaces
+  // The sidebar menu row lives in its own slot scope; share the list store so
+  // it can drop a deleted Session from the client mirror.
+  sessionStoreForRefresh = ctx.sessions as unknown as { refresh?: () => Promise<unknown> }
 
   const syncLocale = (): void => {
     setAppLocale(ctx.locale.getLocale().active)
@@ -2476,7 +2481,7 @@ export function apply(ctx: ClientContext): void {
 
   // The conversation header's right-aligned utilities row (official slot that
   // also hosts the Session log button). Order, left to right:
-  //   对话管理 (-40 host) → 对话管理按钮 (-30) → 删除本对话 (-10) → Session log (0)
+  //   对话管理 (-40 host) → 对话管理按钮 (-30) → Session log (0)
   ctx.slots.inject('conversation.session.header.utilities', () => {
     const common = () => ({ api, sessions })
     const disposers = [
@@ -2494,17 +2499,23 @@ export function apply(ctx: ClientContext): void {
         locale: NS,
         inject: common,
       }, HeaderManageButton),
-      ctx.slots.register({
-        name: 'conversation.session.header.utilities',
-        id: 'dsh-delete-session',
-        order: -10,
-        locale: NS,
-        inject: () => ({}),
-      }, DeleteCurrentButton),
     ]
     return () => {
       disposers.forEach((dispose) => dispose())
     }
+  })
+
+  // The sidebar Session row's "..." menu (pin / rename / fork / archive /
+  // copy Session ID). Order 500 puts the delete row last, in its own group.
+  ctx.slots.inject('sidebar.workspaces.session.menu.item', () => {
+    const dispose = ctx.slots.register({
+      name: 'sidebar.workspaces.session.menu.item',
+      id: 'dsh-delete-session-menu-item',
+      order: 500,
+      locale: NS,
+      inject: () => ({}),
+    }, DeleteSessionMenuItem)
+    return () => dispose()
   })
 }
 
@@ -2522,15 +2533,26 @@ interface ClientContext {
   }
 }
 
-/** The framework-injected session id for the header actions slot. */
-interface DeleteCurrentButtonProps {
+/** The framework-injected props of one sidebar Session "..." menu row. */
+interface DeleteSessionMenuItemProps {
   sessionId: string
+  displayTitle?: string
+  /** Injected by the slot: `[open, setOpen]` for the owning menu. */
+  useMenuOpenState?: () => readonly [boolean, (open: boolean) => void]
 }
 
-/** Red "delete this session" button mounted in the conversation header. */
-function DeleteCurrentButton({ sessionId }: DeleteCurrentButtonProps): ReactElement {
+/**
+ * One `sidebar.workspaces.session.menu.item` row: delete this Session (移入回收站).
+ * Lives beside the shipped pin / rename / fork / archive / copy-id rows and
+ * reuses the same danger + confirmation flow as the Session Manager panel.
+ */
+function DeleteSessionMenuItem({ sessionId, displayTitle, useMenuOpenState }: DeleteSessionMenuItemProps): ReactElement | null {
   const strings = useLocaleStrings()
   const [askConfirm, confirmDialog] = useSessionDialog()
+  const menuOpenState = typeof useMenuOpenState === 'function' ? useMenuOpenState() : undefined
+  const setMenuOpen = menuOpenState?.[1]
+  const title = (displayTitle ?? '') !== '' ? (displayTitle as string) : sessionId
+  const [busy, setBusy] = useState(false)
 
   /** Run one delete attempt; returns the host error code, or null on success. */
   const deleteOnce = async (force: boolean): Promise<string | null> => {
@@ -2543,64 +2565,78 @@ function DeleteCurrentButton({ sessionId }: DeleteCurrentButtonProps): ReactElem
     }
   }
 
-  const handleClick = (): void => {
+  const handleSelect = (): void => {
+    // Close the native "..." menu first: the confirm dialog takes focus next.
+    setMenuOpen?.(false)
+    if (busy) return
+    setBusy(true)
     void (async () => {
-      const confirmed = await askConfirm({
-        title: strings.deleteTitle,
-        description: strings.deleteCurrentConfirm,
-        detail: sessionId,
-        confirmLabel: strings.delete,
-        cancelLabel: strings.cancel,
-        tone: 'danger',
-      })
-      if (!confirmed) return
-
-      let code = await deleteOnce(false)
-      if (code === null) return
-
-      if (code === 'session-live') {
-        await askConfirm({
-          title: strings.deleteCurrentFailed,
-          description: strings.deleteCurrentRunning,
+      try {
+        const confirmed = await askConfirm({
+          title: strings.deleteTitle,
+          description: strings.confirm.replace('{title}', title),
           detail: sessionId,
-          confirmLabel: strings.confirmOk,
-          cancelLabel: strings.confirmOk,
-          notice: true,
+          confirmLabel: strings.delete,
+          cancelLabel: strings.cancel,
+          tone: 'danger',
         })
-        return
-      }
+        if (!confirmed) return
 
-      // Force path: the catalog could not resolve or archive this session.
-      const forced = await askConfirm({
-        title: strings.deleteFailedTitle,
-        description: strings.forceDeleteHint,
-        detail: `${strings.forceDeleteDetail}: ${sessionId}\n${code}`,
-        confirmLabel: strings.forceDelete,
-        cancelLabel: strings.cancel,
-        tone: 'danger',
-      })
-      if (!forced) return
+        let code = await deleteOnce(false)
+        if (code === null) {
+          void (sessionsRefresh() )
+          return
+        }
 
-      code = await deleteOnce(true)
-      if (code !== null) {
-        await askConfirm({
+        if (code === 'session-live') {
+          await askConfirm({
+            title: strings.deleteFailedTitle,
+            description: strings.liveError,
+            detail: sessionId,
+            confirmLabel: strings.confirmOk,
+            cancelLabel: strings.confirmOk,
+            notice: true,
+          })
+          return
+        }
+
+        // Force path: the catalog could not resolve or archive this session.
+        const forced = await askConfirm({
           title: strings.deleteFailedTitle,
-          description: strings.forceFailed.replace('{msg}', code),
-          detail: sessionId,
-          confirmLabel: strings.confirmOk,
-          cancelLabel: strings.confirmOk,
-          notice: true,
+          description: strings.forceDeleteHint,
+          detail: `${strings.forceDeleteDetail}: ${sessionId}\n${code}`,
+          confirmLabel: strings.forceDelete,
+          cancelLabel: strings.cancel,
+          tone: 'danger',
         })
+        if (!forced) return
+
+        code = await deleteOnce(true)
+        if (code !== null) {
+          await askConfirm({
+            title: strings.deleteFailedTitle,
+            description: strings.forceFailed.replace('{msg}', code),
+            detail: sessionId,
+            confirmLabel: strings.confirmOk,
+            cancelLabel: strings.confirmOk,
+            notice: true,
+          })
+        } else {
+          void (sessionsRefresh())
+        }
+      } finally {
+        setBusy(false)
       }
     })()
   }
+
   return createElement(Fragment, null,
-    createElement('button', {
-      type: 'button',
-      'data-dsh-delete-current': '',
-      title: strings.deleteCurrent,
-      'aria-label': strings.deleteCurrent,
-      onClick: handleClick,
+    createElement(MenuItemButton, {
+      icon: createElement(TrashIcon, { size: 16 }),
+      danger: true,
+      separatorBefore: true,
+      disabled: busy,
+      onSelect: handleSelect,
       children: strings.deleteCurrent,
     }),
     confirmDialog,

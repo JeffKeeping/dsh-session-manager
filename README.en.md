@@ -8,11 +8,11 @@ archived sessions, activity stats, continue/pause, open the log folder, unread m
 chat, workspace grouping and ordering, and a global context-compaction threshold. No harness changes.
 
 This repository is a derivative of [dream12347/dsh-session-manager](https://github.com/dream12347/dsh-session-manager)
-(MIT), built on its v0.2.3 artifacts and published as **v0.4.0** with: DSH-native confirmation dialogs,
+(MIT), built on its v0.2.3 artifacts and published as **v0.4.1** with: DSH-native confirmation dialogs,
 wider session-ID compatibility, **force delete**, and **empty trash**; it also fixes a startup crash caused
 by duplicate route registration on plugin re-mount.
 
-## What v0.4.0 changes
+## What v0.4.1 changes
 
 | # | Change | Detail |
 |---|---|---|
@@ -21,6 +21,8 @@ by duplicate route registration on plugin re-mount.
 | 3 | **Force delete** | When a normal delete fails, the failure dialog offers Force delete: it skips the official archive step, falls back to locating the artifact at `~/.dsh/sessions/<project>/<id>`, and still moves it into the trash (restorable). `POST /dsh-session-manager/delete` accepts `{ sessionId, force: true }`; a session mid-turn is still refused |
 | 4 | **Empty trash** | The trash gains an Empty trash button backed by `POST /dsh-session-manager/purge-all`: every entry and its on-disk folder is removed for good. Entries that cannot be removed stay recorded for a retry, and the response reports `purged` / `failed` / `remaining` |
 | 5 | **Route-registration crash fix** | `webServer.register()` throws on a duplicate `(kind, path)`. A plugin re-mount (config reload, disable/enable, service replacement) re-registered the same nine routes while the previous generation was still in the table, and the exception escaped `apply()` — **failing host startup**. Routes now install through a process-wide table: a new mount takes its routes over (disposing the stale entry first), a remaining collision is logged, and a rejected `setup()` is contained so the plugin stays inactive instead of killing the host |
+
+| 6 | **Delete moved into the row menu** | The red header button is gone; deleting a session is now a destructive row in the sidebar "..." menu (`sidebar.workspaces.session.menu.item`, order 500) beside pin / rename / fork / archive / copy-id, so the conversation title bar stays clean |
 
 ## Features
 
@@ -47,7 +49,7 @@ by duplicate route registration on plugin re-mount.
 dsh plugin --profile <profile> add https://github.com/JeffKeeping/dsh-session-manager/releases/latest/download/dsh-session-manager.tgz
 
 # From git
-dsh plugin --profile <profile> add 'github:JeffKeeping/dsh-session-manager#v0.4.0'
+dsh plugin --profile <profile> add 'github:JeffKeeping/dsh-session-manager#v0.4.1'
 
 # From a local directory (linked into the profile — keep the directory in place)
 dsh plugin --profile <profile> add /absolute/path/to/dsh-session-manager
@@ -60,52 +62,21 @@ Restart the desktop app / `dsh web` afterwards: host plugins and client bundles 
 
 ## Screenshots
 
-The Settings "Session Manager" section (workspace groups, row actions and trash):
+The Session Manager section in Settings (workspace groups, row actions, batch delete and trash):
 
-![Session Manager settings section](assets/settings-section.png)
+![Settings section](assets/settings-section.png)
 
-Conversation header shortcuts (Session Manager / Trash / Delete this session):
+A Session row's "..." menu — the delete entry sits in its own group after "Copy Session ID" (red, destructive):
 
-![Conversation header shortcuts](assets/header-buttons.png)
+![Session row menu](assets/session-menu.png)
 
-The session management drawer (workspace groups, pin to keep open, outside-click to close):
+The Session drawer (same data as the settings page; "More" folds stats / folder / fork):
 
-![Session management drawer](assets/session-drawer.png)
+![Session drawer](assets/session-drawer.png)
 
-The "Context compaction threshold" in General settings (17%–90% with slider scale):
+General Settings — context compaction threshold (17%–90%):
 
-![Context compaction threshold](assets/general-settings.png)
-
-## Usage
-
-### Settings section
-
-1. Open **Settings** (the gear icon at the bottom of the sidebar)
-2. A dedicated **Session Manager** section appears in the settings left navigation — click it
-3. The main list shows unarchived sessions; the **Archived sessions** collapsible area at the bottom lets you view, **restore**, or delete archived sessions
-4. Deleting moves a session to the **Trash** collapsible area (keeps the most recent 10)
-5. In the trash you can **Restore** (back to the list) or **Delete permanently** (irreversible)
-6. Per-row actions: **Continue session** (open and enter), **Pause** (stop the running turn), **Stats** (expand recent activity), **Folder** (reveal the log directory), **Delete**
-7. Workspace title actions (shown on hover): **Move to top**, **Rename**, **Delete** (red, with a confirmation dialog)
-8. Drag a workspace title to reorder: drop above/below another workspace to insert, drop on a title to swap, drag to the very bottom to append
-9. The sort toggle (newest first / oldest first) switches the session order inside each group
-
-### General settings: context compaction threshold
-
-1. Open **Settings** → **General**
-2. Find "Context compaction threshold": slider / input for 17%–90%
-3. Saving applies immediately (including already-open sessions); the value applies globally to all agent presets and survives restarts
-
-### Conversation header shortcuts
-
-Top right of any conversation (left of Session log):
-- **Session Manager**: opens the management drawer (full list + archived + trash); pin it to keep open, outside-click closes it
-- **Trash**: opens the drawer with the trash expanded
-- **Delete this session** (red): deletes the current conversation (moves it to the trash)
-
-### Unread / read status dots
-
-The dot next to a session's title shows one of four states: **blue** = manually marked unread, **amber** = official waiting-for-input, **green** = official completion reminder, **spinner** = running. Clicking an amber/green dot marks it read **in place** (clears the official reminder without navigating); clicking the blue dot clears the unread; clicking the empty spot marks it unread; opening the session auto-reads it. The official sidebar mirrors the blue unread dot on the matching session row (matched by title text — sessions with duplicate titles share the dot).
+![Compaction threshold](assets/general-settings.png)
 
 ## Force delete
 
