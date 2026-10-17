@@ -1,0 +1,6 @@
+url: https://github.com/JeffKeeping/dsh-session-manager
+name: JeffKeeping/dsh-session-manager
+category: session
+description:
+  en: "DSH session manager: delete with a recoverable trash (restore, purge, or empty it in one click), force delete for ids the official catalog cannot resolve, restore archived sessions, recent-activity stats, continue/pause, open log folder, unread markers, fork into a new chat, workspace grouping and sorting, context compaction threshold. Native DSH dialogs."
+  zh: "DSH 会话管理插件：删除（回收站可恢复、可彻底删除、可一键清空）、强制删除官方目录无法解析的会话、恢复归档会话、活动统计、继续/暂停、打开日志目录、未读标记、新聊天中继续、工作区分组与排序、上下文压缩阈值设置。原生 DSH 弹窗。"

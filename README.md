@@ -1,23 +1,24 @@
 # dsh-session-manager
 
-[English](README.en.md) | 中文
+[中文](README.md) | [English](README.en.md)
 
-在 DeepSeek Harness Web 界面中全面**管理会话**：设置页与对话顶部均提供入口——删除（回收站可恢复或彻底清除）、恢复已归档会话、近期活动统计、继续/暂停会话、打开日志目录、未读/已读标记、新聊天中继续（fork）、工作区分组与排序管理、上下文压缩阈值设置，不修改 DSH 核心代码。
+在 DeepSeek Harness Web 界面中全面**管理会话**：设置页与对话顶部均提供入口——删除（回收站可恢复、可彻底清除、可一键清空）、恢复已归档会话、近期活动统计、继续/暂停会话、打开日志目录、未读/已读标记、新聊天中继续（fork）、工作区分组与排序管理、上下文压缩阈值设置，不修改 DSH 核心代码。
 
 本仓库基于 [dream12347/dsh-session-manager](https://github.com/dream12347/dsh-session-manager)（MIT）的 v0.2.3 构建产物，
-在其上做了 **v0.3.0** 的三项改进：DSH 原生风格的确认弹窗、更宽的会话 ID 兼容、以及**强制删除**；并修掉了
-重挂载时路由重复注册导致宿主启动失败的问题。功能列表与实现说明沿用上游。
+在其上发布 **v0.4.0**：DSH 原生风格确认弹窗、更宽的会话 ID 兼容、**强制删除**、**一键清空回收站**，
+并修复了重挂载时路由重复注册导致宿主启动失败的问题。功能列表与实现说明沿用上游。
 
 <sub><span style="opacity:.6">上游项目由 dsh + Deepseek-V4-Flash0731 完成；本仓库为其衍生版本，遵循 MIT。</span></sub>
 
-## v0.3.0 相对上游的改动
+## v0.4.0 相对上游的改动
 
 | # | 改动 | 说明 |
 |---|---|---|
 | 1 | **原生确认弹窗** | 所有 `window.confirm()` / `window.alert()` 换成 `@deepseek-ai/dsh-client-ui-primitives` 的官方 `Modal`：遮罩模糊、Esc 关闭、焦点归还、危险动作使用 `--dsw-alias-state-error-primary`，会话 ID 以等宽字体展示。彻底告别桌面端弹出的系统消息框 |
 | 2 | **更宽的会话 ID 兼容** | 原来只接受 `session-<hex>`，遇到 `od-<uuid>` 一类由其它入口铸造的 ID 会直接返回 `invalid-session-id`，导致「删不掉」。现在接受任意可安全用作单层路径的 ID（`[A-Za-z0-9][A-Za-z0-9._-]{0,199}`，禁止 `..`） |
 | 3 | **强制删除** | 常规删除失败时，失败弹窗直接给出「强制删除」：跳过官方归档校验、按磁盘目录兜底定位会话目录，直接移入回收站（仍可恢复）。`POST /dsh-session-manager/delete` 接受 `{ sessionId, force: true }`；运行中的会话依旧拒绝 |
-| 4 | **路由注册崩溃修复** | `webServer.register()` 对重复 `(kind, path)` 是硬抛错。插件重挂载（配置重载 / 禁用启用 / 服务替换）时会重复注册 8 条路由而旧注册未释放，异常沿 `apply()` 逃逸，**宿主启动直接失败**。现在改用进程级路由表：新挂载先接管（释放旧注册再注册），仍冲突只记日志；`setup()` 失败也被 `apply()` 兜住，插件不激活但宿主继续运行 |
+| 4 | **一键清空回收站** | 回收站新增「清空回收站」按钮，经 `POST /dsh-session-manager/purge-all` 一次性永久清除全部条目与其磁盘目录；部分条目删除失败时保留其记录以便重试，并回报 `purged` / `failed` / `remaining` |
+| 5 | **路由注册崩溃修复** | `webServer.register()` 对重复 `(kind, path)` 是硬抛错。插件重挂载（配置重载 / 禁用启用 / 服务替换）会重复注册 9 条路由而旧注册未释放，异常沿 `apply()` 逃逸，**宿主启动直接失败**。现在改用进程级路由表：新挂载先接管（释放旧注册再注册），仍冲突只记日志；`setup()` 失败也被 `apply()` 兜住，插件不激活但宿主继续运行 |
 
 ## 功能
 
@@ -39,31 +40,40 @@
 
 ## 安装
 
-### 从本仓库本地目录安装（开发/自用）
+### 从 Release（推荐）
 
 ```sh
-dsh plugin --profile <profile> add /absolute/path/to/dsh-session-manager
+dsh plugin --profile <profile> add https://github.com/JeffKeeping/dsh-session-manager/releases/latest/download/dsh-session-manager.tgz
 ```
 
-DSH 插件管理器对本地目录采用 **link** 方式，安装后**不要移动或删除该目录**。
-
-### 从 Git 仓库安装
+也可以先下载 `dsh-session-manager.tgz` 再本地安装：
 
 ```sh
-dsh plugin --profile <profile> add 'github:<owner>/dsh-session-manager#v0.3.0'
+dsh plugin --profile <profile> add /absolute/path/to/dsh-session-manager.tgz
+```
+
+> 本地目录安装是 **link** 方式，安装后不要移动或删除该目录。
+
+### 从 GitHub
+
+```sh
+dsh plugin --profile <profile> add 'github:JeffKeeping/dsh-session-manager#v0.4.0'
+```
+
+### 从本地目录
+
+```sh
+dsh plugin --profile web add /absolute/path/to/dsh-session-manager
 ```
 
 ### 从 tarball
 
 ```sh
 pnpm pack
-dsh plugin --profile <profile> add /absolute/path/to/dsh-session-manager-0.3.0.tgz
+dsh plugin --profile web add /absolute/path/to/dsh-session-manager-0.2.2.tgz
 ```
 
-安装完成后**重启**桌面端 / `dsh web`（host 插件与客户端 bundle 需重新加载）。
-
-> 如果安装了插件市场类插件，请确认其 `state.json` 的 `disabled` 数组里没有 `dsh-session-manager`，
-> 否则插件会在启动时被重放禁用。
+安装完成后**重启** `dsh web`（host 插件与客户端 bundle 需要重启加载）。
 
 ## 截图
 
@@ -97,16 +107,6 @@ dsh plugin --profile <profile> add /absolute/path/to/dsh-session-manager-0.3.0.t
 8. 拖拽工作区标题可调整顺序：放到某个工作区上方/下方插入，放到标题上交换位置，拖到最下方即移到末尾
 9. 排序按钮（最新在前 / 最旧在前）切换组内会话的排列顺序
 
-### 强制删除（v0.3.0）
-
-当某个会话的 ID 不属于官方目录（例如由其它入口铸造的 `od-<uuid>`），或归档步骤异常时，常规删除会报错。
-此时失败弹窗会显示会话 ID 与宿主返回的错误码，并提供 **强制删除**：
-
-- 跳过官方归档校验；
-- 官方目录查不到时，按 `~/.dsh/sessions/<project>/<id>` 扫描定位会话目录；
-- 目录仍会移入回收站，**可以恢复**；
-- 正在运行的会话依然拒绝（文件被占用）。
-
 ### 通用设置：上下文压缩阈值
 
 1. 打开 **设置** → **通用设置**（General）
@@ -124,15 +124,25 @@ dsh plugin --profile <profile> add /absolute/path/to/dsh-session-manager-0.3.0.t
 
 会话行标题旁的圆点表示四种状态：**蓝色**=手动标记未读、**琥珀**=官方等待输入、**绿色**=官方完成提醒、**转圈**=运行中。点击琥珀 / 绿色点**就地标记已读**（不跳转，仅清除官方提醒）；点击蓝色点清除未读；点击空白位置标记未读；打开会话自动已读。官方侧边栏的会话行旁同步显示蓝色未读点（按标题文本匹配，重复标题会话会共享该点）。
 
+## 强制删除（v0.3.0+）
+
+当某个会话的 ID 不属于官方目录（例如由其它入口铸造的 `od-<uuid>`），或归档步骤异常时，常规删除会报错。
+此时失败弹窗会显示会话 ID 与宿主返回的错误码，并提供 **强制删除**：跳过官方归档校验、按
+`~/.dsh/sessions/<project>/<id>` 扫描定位会话目录，再移入回收站（**可以恢复**）；正在运行的会话依然拒绝。
+
+## 清空回收站（v0.4.0）
+
+回收站展开后底部有 **清空回收站** 按钮：确认后一次性永久删除回收站中的全部会话（含
+`~/.dsh/dsh-delete-session-trash/` 下的目录），**不可恢复**。个别条目删除失败时会保留其记录以便重试，
+弹窗会报告成功与失败数量。
+
 ## 工作原理
 
 | 层 | 实现 |
 |---|---|
-| Host | `src/index.ts` 注册 8 条路由：`POST /delete`（归档 + 非 live 会话文件移入回收站 + 记录条目，支持 `force`）、`POST /restore`（文件移回 + 取消归档 + 删除条目）、`POST /purge`（清除回收站与原位置文件 + 删除条目）、`GET /trash`（回收站列表）、`POST /open-folder`（打开日志目录）、`POST /pause`（暂停运行中会话）、`GET\|POST /compaction-threshold`（读写全局压缩阈值）、`GET /stats`（活动统计）。通过 `ctx.sessionPersistence` 定位会话、`ctx.workspaceRegistry` 归档/取消归档、`ctx.storageDomain` 持久化回收站条目、归档集合与阈值；`ctx.agents` 检测运行中的会话并拒绝删除 |
+| Host | `src/index.ts` 注册 9 条路由：`POST /delete`（归档 + 非 live 会话文件移入回收站 + 记录条目，支持 `force`）、`POST /restore`（文件移回 + 取消归档 + 删除条目）、`POST /purge`（清除单个回收站条目与文件）、`POST /purge-all`（清空回收站）、`GET /trash`（回收站列表）、`POST /open-folder`（打开日志目录）、`POST /pause`（暂停运行中会话）、`GET\|POST /compaction-threshold`（读写全局压缩阈值）、`GET /stats`（活动统计）。通过 `ctx.sessionPersistence` 定位会话、`ctx.workspaceRegistry` 归档/取消归档、`ctx.storageDomain` 持久化回收站条目、归档集合与阈值；`ctx.agents` 检测运行中的会话并拒绝删除 |
 | Client | `src/client/index.ts` 通过官方 `settings.section` 插槽注册独立分栏，用 `useSessions` / `useWorkspaces` 标准数据源列出会话（含归档/回收站分组），删除/恢复/彻底删除调用 host 路由；抽屉通过 `sessions.list`（ObservableSnapshot）订阅实时列表；彻底删除的会话 id 记录在浏览器 localStorage，避免 live 会话删除后刷新「复活」 |
 
-- **确认弹窗**：统一走 `useSessionDialog()`，内部渲染官方 `Modal`（body portal、遮罩模糊、Esc、焦点归还），危险动作用错误色主按钮
-- **路由注册**：所有路由经 `installRoute()` 安装到进程级路由表（`Symbol.for('dsh-session-manager:routes')`），重挂载时接管旧注册、冲突只告警，卸载时只释放自己那一代
 - **未读机制**：手动未读集保存在浏览器 localStorage 的共享 key `dsh.session-unread.v1`（`{version:1, ids:[]}` 格式，与其他会话管理插件互通）；官方状态点（琥珀/绿色/转圈）由官方 `SessionSummary` 的 `pendingInteraction` / `completed` / `running` 字段驱动，点击就地已读通过清除官方提醒标记实现，无需打开会话；侧边栏的蓝色未读点由 MutationObserver 装饰官方树节点（官方行元素没有会话 id 属性，故按标题文本匹配）
 - **压缩阈值全局生效**：保存在存储域（`dsh_delete_session` 的 `thresholdRatio`）；如果默认 Agent 预设是用户预设，则同时写入 agent-presets 服务解析出的 `agent.cordis.yml`，系统预设文件保持只读。host 在每个 `agent/pre-step` 钩子里把阈值写入所有预设的压缩引擎配置，因此对所有 Agent 预设的会话统一生效，重启后依然有效
 - 删除时先走官方归档通道：侧边栏立即隐藏该会话
@@ -147,33 +157,23 @@ dsh plugin --profile <profile> add /absolute/path/to/dsh-session-manager-0.3.0.t
 - live 会话（当前进程内打开的会话）删除后，其内存状态由 DSH 在重启时彻底清理
 - 已彻底删除的会话 id 会保留在浏览器 localStorage（防止刷新后重新出现）与归档集合中（无害残留，不显示）
 - 侧边栏未读点按标题文本匹配，存在重复标题的会话时两者会共享同一个点（会话管理抽屉内不受影响，按真实会话 id 精确标记）
-- 工作区重命名仍使用浏览器原生 `prompt`（未改造为自绘输入框）
 
 ## 兼容性
 
-本版本在 **DSH 0.2.1-rc.2**（桌面端）上验证（依赖 `settings.section` / `settings.general.item` /
-`conversation.session.header.utilities` 插槽，与 `ctx.sessionPersistence` / `ctx.workspaceRegistry` /
-`ctx.agents` / `ctx.storageDomain` / `ctx.agentPresets` 服务）。上游声明适配 `0.1.1-rc.1` 与 `0.2.0-rc.2`；
+本版本在 **DSH 0.2.1-rc.2**（桌面端）验证；上游声明适配 `0.1.1-rc.1` 与 `0.2.0-rc.2`。
+已在 0.2.1-rc.2 核对：`ctx.sessionPersistence.locate()` 仍存在；`IconTrashOutline16` 已移除，插件自动回退到
+`IconTrashOutlineRegular`；`Modal` / `Button` / `StateDot` 均由 `@deepseek-ai/dsh-client-ui-primitives@0.2.1-rc.2` 导出。
 DSH 版本升级后如插槽或服务 API 变化，需要同步适配。
-
-已在 0.2.1-rc.2 上核对：
-
-- `ctx.sessionPersistence.locate()` 仍存在（回收站移动文件依赖它）
-- `IconTrashOutline16` 已移除，插件自动回退到 `IconTrashOutlineRegular`
-- `Modal` / `Button` / `StateDot` 均由 `@deepseek-ai/dsh-client-ui-primitives@0.2.1-rc.2` 导出
 
 ## 开发
 
 ```sh
-npm install --no-save tsdown   # 仅构建需要（不写入 package.json）
-npx tsdown                     # 生成 lib/index.js 与 lib/client.js
+npm install --no-save tsdown        # 仅构建需要，不写入 package.json
+npx tsdown                          # 生成 lib/index.js 与 lib/client.js
 node tests/route-guard.manual.mjs   # 路由接管 / 重复挂载回归测试
 ```
 
-`lib/` 为提交的构建产物，修改源码后必须重新构建并提交 `lib/`。构建在两个文件上都与上游产物
-逐字节一致（在改动前验证过），因此可以放心用于 diff。
-
-发布 Release 时建议始终以 `dsh-session-manager.tgz` 作为附件名，保持下载地址稳定。
+`lib/` 为提交的构建产物，修改源码后必须重新构建并提交 `lib/`。该工具链在改动前可逐字节复现上游产物。
 
 ## 许可
 

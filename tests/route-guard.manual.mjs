@@ -59,7 +59,7 @@ function makeCtx(state, { failDomain = false } = {}) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function report(name, ok, detail) {
-  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`)
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? ` -${detail}` : ''}`)
   if (!ok) process.exitCode = 1
 }
 
@@ -76,7 +76,7 @@ function report(name, ok, detail) {
     threw = error
   }
   report('duplicate mount does not throw', threw === null, threw ? String(threw) : '')
-  report('eight routes installed exactly once', state.routes.size === 8, `routes=${state.routes.size}`)
+  report('nine routes installed exactly once', state.routes.size === 9, `routes=${state.routes.size}`)
   report('no route-collision warning needed', state.warnings.length === 0, state.warnings.join(' | '))
 
   // Disposing the last mount releases its routes.
@@ -115,7 +115,7 @@ function report(name, ok, detail) {
   const ctx = makeCtx(state)
   mod.apply(ctx)
   await sleep(60)
-  report('remount after disposal installs routes', state.routes.size === 8, `routes=${state.routes.size}`)
+  report('remount after disposal installs routes', state.routes.size === 9, `routes=${state.routes.size}`)
 }
 
 rmSync(OUT_DIR, { recursive: true, force: true })

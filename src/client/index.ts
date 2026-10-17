@@ -35,11 +35,13 @@ import {
   DELETE_ROUTE,
   OPEN_FOLDER_ROUTE,
   PAUSE_ROUTE,
+  PURGE_ALL_ROUTE,
   PURGE_ROUTE,
   RESTORE_ROUTE,
   STATS_ROUTE,
   TRASH_ROUTE,
   type ActionResultResponse,
+  type PurgeAllResponse,
   type TrashEntry,
   type TrashListResponse,
 } from '../contract.ts'
@@ -433,6 +435,11 @@ const STYLE = `
   font-size: 11px;
   line-height: 1.5;
   margin: 6px 8px 0;
+}
+.dsh-delete-session__trash-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 8px 0;
 }
 .dsh-delete-session__row[data-archived] {
   opacity: .72;
@@ -942,6 +949,12 @@ function stringsOf() {
         restoreFailed: '恢复会话「{title}」失败',
         purge: '彻底删除',
         purgeConfirm: '确定彻底删除会话「{title}」吗？日志与记录将永久清除，无法恢复。',
+        purgeAll: '清空回收站',
+        purgeAllConfirm: '确定清空回收站吗？其中的 {count} 个会话将被永久删除，无法恢复。',
+        purgeAllHint: '连同回收站目录一起永久清除，不可恢复。',
+        purgeAllDone: '已清空回收站（{count} 个会话）',
+        purgeAllPartial: '清空了 {done} 个，{failed} 个未能删除',
+        purgeAllFailed: '清空回收站失败',
         purged: '已彻底删除会话「{title}」',
         purgeFailed: '彻底删除会话「{title}」失败',
         expand: '展开',
@@ -1044,6 +1057,12 @@ function stringsOf() {
         restoreFailed: 'Failed to restore session "{title}"',
         purge: 'Delete permanently',
         purgeConfirm: 'Permanently delete session "{title}"? Its logs and records cannot be recovered.',
+        purgeAll: 'Empty trash',
+        purgeAllConfirm: 'Empty the trash? All {count} sessions in it will be permanently deleted and cannot be recovered.',
+        purgeAllHint: 'Removes the trash folder contents for good; not recoverable.',
+        purgeAllDone: 'Trash emptied ({count} sessions)',
+        purgeAllPartial: 'Purged {done}, {failed} could not be deleted',
+        purgeAllFailed: 'Failed to empty the trash',
         purged: 'Permanently deleted session "{title}"',
         purgeFailed: 'Failed to permanently delete session "{title}"',
         expand: 'Expand',
@@ -1750,6 +1769,40 @@ function SessionManager({ useSessions, useWorkspaces, api, sessions, workspaceAc
     }
   }, [strings, loadTrash, markRemoved, showNotice, sessions])
 
+  const handlePurgeAll = useCallback(async (): Promise<void> => {
+    const count = trash?.length ?? 0
+    if (count === 0) return
+    const confirmed = await askConfirm({
+      title: strings.purgeAll,
+      description: strings.purgeAllConfirm.replace('{count}', String(count)),
+      detail: strings.purgeAllHint,
+      confirmLabel: strings.purgeAll,
+      cancelLabel: strings.cancel,
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    setNotice(null)
+    try {
+      const data = await postActionResult(PURGE_ALL_ROUTE, {}) as PurgeAllResponse
+      for (const entry of trash ?? []) markRemoved(entry.sessionId)
+      await loadTrash()
+      if (data.ok === true) {
+        showNotice({ kind: 'ok', text: strings.purgeAllDone.replace('{count}', String(data.purged)) })
+      } else {
+        showNotice({
+          kind: 'error',
+          text: strings.purgeAllPartial
+            .replace('{done}', String(data.purged))
+            .replace('{failed}', String(data.failed?.length ?? 0)),
+        })
+      }
+      void (sessions as unknown as { refresh?: () => Promise<unknown> }).refresh?.()
+    } catch (error) {
+      const code = error instanceof Error ? error.message : ''
+      showNotice({ kind: 'error', text: strings.purgeAllFailed + (code !== '' ? ` (${code})` : '') })
+    }
+  }, [askConfirm, strings, trash, loadTrash, markRemoved, showNotice, sessions])
+
   // Toggle the stats for one session: fold the recent history window.
   const handleStats = useCallback(async (sessionId: string): Promise<void> => {
     if (statsId === sessionId) {
@@ -2180,6 +2233,17 @@ function SessionManager({ useSessions, useWorkspaces, api, sessions, workspaceAc
             : createElement('ul', { className: 'dsh-delete-session__list' },
                 ...trash.map((entry) => renderTrashRow(entry)),
               )),
+      trash.length > 0 && createElement('div', { className: 'dsh-delete-session__trash-actions' },
+        createElement(Button, {
+          className: 'dsh-row-action dsh-row-action--danger',
+          variant: 'outline',
+          size: 'sm',
+          icon: createElement(TrashIcon, { size: 16 }),
+          title: strings.purgeAllHint,
+          onClick: () => void handlePurgeAll(),
+          children: strings.purgeAll,
+        }),
+      ),
       createElement('div', { className: 'dsh-delete-session__group-hint' },
         strings.trashHint.replace('{limit}', String(trashLimit)),
       ),
@@ -3012,6 +3076,42 @@ function SessionDrawer({ api, sessions }: DrawerInjected): ReactElement {
     }
   }, [strings, postAction, load, refreshTrash, sessions])
 
+  const handlePurgeAll = useCallback(async (): Promise<void> => {
+    const count = trash?.length ?? 0
+    if (count === 0) return
+    const confirmed = await askConfirm({
+      title: strings.purgeAll,
+      description: strings.purgeAllConfirm.replace('{count}', String(count)),
+      detail: strings.purgeAllHint,
+      confirmLabel: strings.purgeAll,
+      cancelLabel: strings.cancel,
+      tone: 'danger',
+    })
+    if (!confirmed) return
+    let data: PurgeAllResponse | null = null
+    let failure: string | null = null
+    try {
+      data = await postActionResult(PURGE_ALL_ROUTE, {}) as PurgeAllResponse
+    } catch (error) {
+      failure = error instanceof Error ? error.message : 'purge-all-failed'
+    }
+    await Promise.all([load(), refreshTrash()])
+    if (failure !== null || data === null) {
+      showAlert(strings.purgeAllFailed + (failure !== null ? ` (${failure})` : ''))
+      return
+    }
+    if (data.ok === true) {
+      showAlert(strings.purgeAllDone.replace('{count}', String(data.purged)))
+    } else {
+      showAlert(strings.purgeAllPartial.replace('{done}', String(data.purged)).replace('{failed}', String(data.failed?.length ?? 0)))
+    }
+    try {
+      await (sessions as { refresh?: () => Promise<unknown> }).refresh?.()
+    } catch {
+      // Best-effort; the next list refresh re-baselines anyway.
+    }
+  }, [askConfirm, strings, trash, load, refreshTrash, showAlert, sessions])
+
   const handlePurge = useCallback(async (sessionId: string, title: string): Promise<void> => {
     const confirmed = await askConfirm({
       title: strings.purge,
@@ -3654,6 +3754,17 @@ function SessionDrawer({ api, sessions }: DrawerInjected): ReactElement {
                 : createElement('ul', { className: 'dsh-delete-session__list' },
                     ...trash.map((entry) => renderTrashRow(entry)),
                   )),
+          trash.length > 0 && createElement('div', { className: 'dsh-delete-session__trash-actions' },
+            createElement(Button, {
+              className: 'dsh-row-action dsh-row-action--danger',
+              variant: 'outline',
+              size: 'sm',
+              icon: createElement(TrashIcon, { size: 16 }),
+              title: strings.purgeAllHint,
+              onClick: () => void handlePurgeAll(),
+              children: strings.purgeAll,
+            }),
+          ),
           createElement('div', { className: 'dsh-delete-session__group-hint' },
             strings.trashHint.replace('{limit}', String(trashLimit)),
           ),

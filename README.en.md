@@ -2,53 +2,55 @@
 
 English | [中文](README.md)
 
-Full **session management** inside the DeepSeek Harness web UI — reachable from both the Settings page
-and the conversation header: delete (with a recoverable trash), restore archived sessions, activity
-stats, continue/pause, open the log folder, unread markers, fork into a new chat, workspace grouping and
-ordering, and a global context-compaction threshold. No harness changes.
+Full **session management** inside the DeepSeek Harness web UI — reachable from both the Settings page and
+the conversation header: delete (with a recoverable trash that can also be emptied in one click), restore
+archived sessions, activity stats, continue/pause, open the log folder, unread markers, fork into a new
+chat, workspace grouping and ordering, and a global context-compaction threshold. No harness changes.
 
 This repository is a derivative of [dream12347/dsh-session-manager](https://github.com/dream12347/dsh-session-manager)
-(MIT), built on its v0.2.3 artifacts, with **v0.3.0** adding: DSH-native confirmation dialogs, wider
-session-ID compatibility, and **force delete**; it also fixes a startup crash caused by duplicate route
-registration on plugin re-mount.
+(MIT), built on its v0.2.3 artifacts and published as **v0.4.0** with: DSH-native confirmation dialogs,
+wider session-ID compatibility, **force delete**, and **empty trash**; it also fixes a startup crash caused
+by duplicate route registration on plugin re-mount.
 
-## What v0.3.0 changes
+## What v0.4.0 changes
 
 | # | Change | Detail |
 |---|---|---|
 | 1 | **Native dialogs** | Every `window.confirm()` / `window.alert()` is now the official `Modal` from `@deepseek-ai/dsh-client-ui-primitives`: body portal, mask blur, Escape handling, focus return, danger actions painted with `--dsw-alias-state-error-primary`, and the session id shown in a monospace block. No more OS message boxes from the desktop shell |
 | 2 | **Wider session IDs** | Only `session-<hex>` used to pass validation, so ids minted by other surfaces (`od-<uuid>`) answered `invalid-session-id` and the session could not be deleted. Now any id that is safe as one path segment is accepted: `[A-Za-z0-9][A-Za-z0-9._-]{0,199}`, `..` rejected |
 | 3 | **Force delete** | When a normal delete fails, the failure dialog offers Force delete: it skips the official archive step, falls back to locating the artifact at `~/.dsh/sessions/<project>/<id>`, and still moves it into the trash (restorable). `POST /dsh-session-manager/delete` accepts `{ sessionId, force: true }`; a session mid-turn is still refused |
-| 4 | **Route-registration crash fix** | `webServer.register()` throws on a duplicate `(kind, path)`. A plugin re-mount (config reload, disable/enable, service replacement) re-registered the same eight routes while the previous generation was still in the table, and the exception escaped `apply()` — **failing host startup**. Routes now install through a process-wide table: a new mount takes its routes over (disposing the stale entry first), a remaining collision is logged, and a rejected `setup()` is contained so the plugin stays inactive instead of killing the host |
+| 4 | **Empty trash** | The trash gains an Empty trash button backed by `POST /dsh-session-manager/purge-all`: every entry and its on-disk folder is removed for good. Entries that cannot be removed stay recorded for a retry, and the response reports `purged` / `failed` / `remaining` |
+| 5 | **Route-registration crash fix** | `webServer.register()` throws on a duplicate `(kind, path)`. A plugin re-mount (config reload, disable/enable, service replacement) re-registered the same nine routes while the previous generation was still in the table, and the exception escaped `apply()` — **failing host startup**. Routes now install through a process-wide table: a new mount takes its routes over (disposing the stale entry first), a remaining collision is logged, and a rejected `setup()` is contained so the plugin stays inactive instead of killing the host |
 
 ## Features
 
-- A dedicated **Session Manager** section in Settings
-- Lists every session (title / working directory), with a separate collapsible **archived** group and one-click restore
-- **Trash**: deleted sessions go to a trash retaining the latest 10 entries; restore or purge permanently
-- **Stats**: recent activity per session (turns / user messages / assistant messages / tool calls / activity window)
-- **Continue** (open the session) and **Pause** (stop the running turn)
-- **Unread / read**: manual unread (blue), official pending interaction (amber), official completion (green), running (spinner); click to mark read in place; the official sidebar rows mirror the blue dot
-- **Fork into a new chat** through the official `sessions.fork`
-- **Folder**: reveal the session log directory in the system file manager
-- **Delete this conversation** from the conversation header
-- **Session drawer** from the header (pinnable, closes on outside click, per-row "more" menu)
-- **Workspace management**: grouping, newest/oldest ordering, drag-and-drop reordering, pin to top / rename / remove
-- **Context compaction threshold** in General Settings (17%–90%), applied to every agent preset, persisted and re-applied after restart
-- Bilingual UI (follows the page locale)
+- A dedicated **Session Manager** section in Settings (a settings section, sibling to Notifications)
+- Lists all sessions (title / working directory); **archived sessions** are grouped in a collapsible area at the bottom with a **one-click Restore** back to the list
+- **Trash**: deleted sessions move to the trash (keeps the most recent 10, the oldest is purged automatically), with **Restore** and **Delete permanently** actions
+- **Stats**: open a centered dialog with complete recent activity (turns / user messages / assistant messages / all tool calls / activity window)
+- **Continue session**: open a session and close the panel; **Pause**: stop a running session's current turn
+- **Unread / read**: a status dot next to each session's title — blue for manually marked unread, amber for the official waiting-for-input state, green for the official completion reminder, spinner while running; clicking an official dot marks it read **in place** (no navigation), clicking the blue dot clears the unread, opening a session auto-reads it; the official sidebar shows a matching blue unread dot on the session row
+- **Fork into a new chat**: one click forks a child session (official `sessions.fork`) and opens it
+- **Folder**: reveal the session's log directory in the system file manager
+- **Delete this session**: a red button in the conversation header (left of Session log) to delete the current session
+- **Session Manager / Trash** header buttons: a self-drawn right drawer (pin to keep open, outside-click to close); a "More" popover in each row holds Stats / Folder / Fork
+- **Workspace management**: sessions are grouped by workspace, sorted by last use within each group (toggle newest/oldest first); drag a workspace title to reorder (insert before/after, swap on the title, drag to the bottom to append); hovering a title shows **Move to top / Rename / Delete** buttons (delete follows the official definition: it only removes the workspace from the list — the folder and session logs are kept, and its sessions appear under Ungrouped)
+- **Context compaction threshold** (General settings): set at what fraction of the 1M-token model window the conversation context auto-compacts (17%–90%), keeping the most recent 16% verbatim; applies **globally to all agent presets** (immediate on save + persisted + auto-applied on restart)
+- Delete restriction: only sessions **currently thinking** are protected; an open-but-idle session can be deleted
+- Subagent sessions can be deleted when not running: even orphaned ones (whose parent session is already deleted) can be cleaned up directly from Session Manager
+- UI language follows the active DSH app language and updates live (Chinese / English)
 
 ## Install
 
 ```sh
-# Local directory (linked into the profile — keep the directory in place)
-dsh plugin --profile <profile> add /absolute/path/to/dsh-session-manager
+# From the release tarball (recommended)
+dsh plugin --profile <profile> add https://github.com/JeffKeeping/dsh-session-manager/releases/latest/download/dsh-session-manager.tgz
 
 # From git
-dsh plugin --profile <profile> add 'github:<owner>/dsh-session-manager#v0.3.0'
+dsh plugin --profile <profile> add 'github:JeffKeeping/dsh-session-manager#v0.4.0'
 
-# From a tarball
-pnpm pack
-dsh plugin --profile <profile> add /absolute/path/to/dsh-session-manager-0.3.0.tgz
+# From a local directory (linked into the profile — keep the directory in place)
+dsh plugin --profile <profile> add /absolute/path/to/dsh-session-manager
 ```
 
 Restart the desktop app / `dsh web` afterwards: host plugins and client bundles load at mount time.
@@ -58,10 +60,52 @@ Restart the desktop app / `dsh web` afterwards: host plugins and client bundles 
 
 ## Screenshots
 
-![Settings section](assets/settings-section.png)
-![Header actions](assets/header-buttons.png)
-![Session drawer](assets/session-drawer.png)
-![Compaction threshold](assets/general-settings.png)
+The Settings "Session Manager" section (workspace groups, row actions and trash):
+
+![Session Manager settings section](assets/settings-section.png)
+
+Conversation header shortcuts (Session Manager / Trash / Delete this session):
+
+![Conversation header shortcuts](assets/header-buttons.png)
+
+The session management drawer (workspace groups, pin to keep open, outside-click to close):
+
+![Session management drawer](assets/session-drawer.png)
+
+The "Context compaction threshold" in General settings (17%–90% with slider scale):
+
+![Context compaction threshold](assets/general-settings.png)
+
+## Usage
+
+### Settings section
+
+1. Open **Settings** (the gear icon at the bottom of the sidebar)
+2. A dedicated **Session Manager** section appears in the settings left navigation — click it
+3. The main list shows unarchived sessions; the **Archived sessions** collapsible area at the bottom lets you view, **restore**, or delete archived sessions
+4. Deleting moves a session to the **Trash** collapsible area (keeps the most recent 10)
+5. In the trash you can **Restore** (back to the list) or **Delete permanently** (irreversible)
+6. Per-row actions: **Continue session** (open and enter), **Pause** (stop the running turn), **Stats** (expand recent activity), **Folder** (reveal the log directory), **Delete**
+7. Workspace title actions (shown on hover): **Move to top**, **Rename**, **Delete** (red, with a confirmation dialog)
+8. Drag a workspace title to reorder: drop above/below another workspace to insert, drop on a title to swap, drag to the very bottom to append
+9. The sort toggle (newest first / oldest first) switches the session order inside each group
+
+### General settings: context compaction threshold
+
+1. Open **Settings** → **General**
+2. Find "Context compaction threshold": slider / input for 17%–90%
+3. Saving applies immediately (including already-open sessions); the value applies globally to all agent presets and survives restarts
+
+### Conversation header shortcuts
+
+Top right of any conversation (left of Session log):
+- **Session Manager**: opens the management drawer (full list + archived + trash); pin it to keep open, outside-click closes it
+- **Trash**: opens the drawer with the trash expanded
+- **Delete this session** (red): deletes the current conversation (moves it to the trash)
+
+### Unread / read status dots
+
+The dot next to a session's title shows one of four states: **blue** = manually marked unread, **amber** = official waiting-for-input, **green** = official completion reminder, **spinner** = running. Clicking an amber/green dot marks it read **in place** (clears the official reminder without navigating); clicking the blue dot clears the unread; clicking the empty spot marks it unread; opening the session auto-reads it. The official sidebar mirrors the blue unread dot on the matching session row (matched by title text — sessions with duplicate titles share the dot).
 
 ## Force delete
 
@@ -71,27 +115,32 @@ the host error code together with **Force delete**, which skips the archive step
 scanning `~/.dsh/sessions/<project>/<id>`, and moves it into the trash — still restorable. A session whose
 agent is mid-turn is refused even in force mode.
 
+## Empty trash
+
+The expanded trash section ends with **Empty trash**. After confirmation every entry and its folder under
+`~/.dsh/dsh-delete-session-trash/` is deleted permanently (not recoverable). Entries that fail stay in the
+trash so they can be retried, and the dialog reports how many were removed.
+
 ## How it works
 
 | Layer | Implementation |
 |---|---|
-| Host | `src/index.ts` registers eight routes: `POST /delete` (archive + move a non-live artifact into the trash + record the entry; accepts `force`), `POST /restore`, `POST /purge`, `GET /trash`, `POST /open-folder`, `POST /pause`, `GET\|POST /compaction-threshold`, `GET /stats`. Uses `ctx.sessionPersistence` to locate sessions, `ctx.workspaceRegistry` to archive/unarchive, `ctx.storageDomain` for the trash and threshold, and `ctx.agents` to refuse running sessions |
-| Client | `src/client/index.ts` registers a `settings.section` entry, lists sessions from `useSessions` / `useWorkspaces`, and calls the host routes. The drawer subscribes to `sessions.list`; purged ids are remembered in `localStorage` so a live session cannot come back after a refresh |
+| Host | `src/index.ts` registers nine routes: `POST /delete` (archive + move a non-live artifact into the trash + record the entry; accepts `force`), `POST /restore`, `POST /purge`, `POST /purge-all`, `GET /trash`, `POST /open-folder`, `POST /pause`, `GET\|POST /compaction-threshold`, `GET /stats`. Uses `ctx.sessionPersistence` to locate sessions, `ctx.workspaceRegistry` to archive/unarchive, `ctx.storageDomain` for the trash and threshold, and `ctx.agents` to refuse running sessions |
+| Client | `src/client/index.ts` registers the dedicated section through the official `settings.section` slot, lists sessions (with the archived group) from the `useSessions` / `useWorkspaces` standard feeds, and calls the host routes to delete/restore/purge; the drawer subscribes to the live session list via `sessions.list` (an ObservableSnapshot); removed session ids are remembered in browser localStorage so a live session does not "resurrect" after refresh |
 
-- **Dialogs** go through `useSessionDialog()`, which renders the official `Modal`
-- **Routes** install through `installRoute()` into a process-wide ownership table (`Symbol.for('dsh-session-manager:routes')`): a later mount takes over, collisions are logged, disposal releases only its own generation
-- **Unread** state lives in `localStorage` under `dsh.session-unread.v1`, shared with other session tools; official status dots are driven by `pendingInteraction` / `completed` / `running`
-- **Compaction threshold** is persisted in the plugin's storage domain and pushed into every preset's engine on each `agent/pre-step`
-- No system-prompt changes, no model tools, zero token/behaviour impact
+- **Unread mechanism**: the manual unread set lives in browser localStorage under the shared key `dsh.session-unread.v1` (format `{version:1, ids:[]}` — interoperable with other session-manager plugins); the official dots (amber/green/spinner) are driven by the official `SessionSummary` fields `pendingInteraction` / `completed` / `running`, and clicking one marks it read in place by clearing the official reminder (no session open); the sidebar blue dots are decorated onto the official tree rows by a MutationObserver (official row elements carry no session-id attribute, so rows are matched by title text)
+- **Global threshold**: stored in the storage domain (`dsh_delete_session` → `thresholdRatio`); when the default agent preset is user-owned, it is also written to the `agent.cordis.yml` resolved by the agent-presets service, while system preset files remain read-only. The host writes the threshold into every preset's compaction-engine config in an `agent/pre-step` hook, so it applies to all presets uniformly and survives restarts
+- Deletion goes through the official archive channel first: the sidebar hides the session immediately
+- Trash entries persist in the DSH storage domain (`~/.dsh/storages/dsh_delete_session.json`); files live in `~/.dsh/dsh-delete-session-trash/`
+- Workspace accounting (`sessionIds` slots / the archive set) is reconciled automatically on the next startup when the registry rebuilds its header index — no manual file editing
+- No system-prompt changes, no new model-facing tools: zero impact on tokens and model behavior
 
 ## Limitations
 
-- A running session cannot be deleted (the button is disabled and the host refuses)
-- Subagent sessions are deletable when idle, including orphans whose parent was deleted
-- A live session's in-memory state is cleaned up by DSH on restart
-- Purged ids stay in `localStorage` and in the archive set (harmless residue, never shown)
-- The sidebar unread dot matches by title text, so duplicate titles share one dot (the drawer uses exact ids)
-- Workspace rename still uses the browser's native `prompt`
+- **Running sessions cannot be deleted** (button disabled and the host refuses); with multiple tabs, stop the session elsewhere first
+- Subagent sessions can be deleted when not running — including orphaned ones left behind by a deleted parent session, so no residue stays forever
+- A live session (opened in this process) has its in-memory state cleaned up by DSH on restart; deleted ids are recorded in browser localStorage so they do not reappear after a refresh
+- Sidebar unread dots are matched by title text: sessions with duplicate titles share the same dot (the drawer is unaffected — it marks by real session id)
 
 ## Compatibility
 

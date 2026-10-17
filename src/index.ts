@@ -765,6 +765,45 @@ function setup(ctx: Context): Promise<() => Promise<void>> {
       },
     })
 
+    // POST /dsh-session-manager/purge-all — empty the whole trash.
+    installRoute({
+      kind: 'exact',
+      path: `${ROUTE_PREFIX}/purge-all`,
+      handler: async (req, res) => {
+        if (req.method !== 'POST') return respond(res, 405, { ok: false, error: 'method-not-allowed' })
+
+        try {
+          await withMutationLock(async () => {
+            const entries = getEntries()
+            let purged = 0
+            const failed: string[] = []
+            for (const entry of entries) {
+              try {
+                // Same two locations a single purge clears: the trash copy and
+                // the original artifact a live session kept writing.
+                await rm(trashSessionDir(entry.sessionId), { recursive: true, force: true })
+                if (entry.originalPath !== undefined) {
+                  await rm(entry.originalPath, { recursive: true, force: true })
+                }
+                purged += 1
+              } catch (error) {
+                failed.push(entry.sessionId)
+                ctx.logger.warn(`[dsh-session-manager] purge-all: failed for ${entry.sessionId}:`, error)
+              }
+            }
+            // Keep only the entries that could not be removed, so a retry is
+            // still possible instead of silently losing the record.
+            const remaining = entries.filter((entry) => failed.includes(entry.sessionId))
+            await setEntries(remaining)
+            respond(res, 200, { ok: failed.length === 0, purged, failed, remaining: remaining.length })
+          })
+        } catch (error) {
+          ctx.logger.warn('[dsh-session-manager] purge-all failed:', error)
+          respond(res, 500, { ok: false, error: 'purge-all-failed' })
+        }
+      },
+    })
+
     // POST /dsh-session-manager/pause — stop a running session's current turn.
     installRoute({
       kind: 'exact',

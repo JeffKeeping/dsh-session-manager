@@ -1,31 +1,39 @@
 # 更新日志 (Changelog)
 
-## v0.3.0 (2026-10-17)
+## v0.4.0 (2026-10-17)
 
-本版本为衍生版本，基于上游 v0.2.3 构建产物。
+本版本为衍生版本，基于上游 v0.2.3 构建产物，在 DSH 0.2.1-rc.2 上验证。
 
 ### 新增
 
-- **原生确认弹窗**：删除 / 恢复 / 彻底删除 / 批量删除 / 删除工作区 / 保存失败等提示，全部改用
-  `@deepseek-ai/dsh-client-ui-primitives` 的官方 `Modal`（body portal、遮罩模糊、Esc 关闭、焦点归还、
-  危险动作用 `--dsw-alias-state-error-primary`），会话 ID 以等宽字体展示；不再弹出桌面端系统消息框
+- **原生确认弹窗**：删除 / 恢复 / 彻底删除 / 批量删除 / 清空回收站 / 删除工作区 / 保存失败等提示，
+  全部改用 `@deepseek-ai/dsh-client-ui-primitives` 的官方 `Modal`（body portal、遮罩模糊、Esc 关闭、
+  焦点归还、危险动作用 `--dsw-alias-state-error-primary`），会话 ID 以等宽字体展示；不再弹出桌面端系统消息框
 - **强制删除**：常规删除失败时，失败弹窗提供「强制删除」。跳过官方归档校验，按
-  `~/.dsh/sessions/<project>/<id>` 兜底定位目录并移入回收站（仍可恢复）；运行中的会话依旧拒绝
+  `~/.dsh/sessions/<project>/<id>` 兜底定位目录并移入回收站（仍可恢复）；运行中的会话依旧拒绝。
+  路由：`POST /dsh-session-manager/delete` 接受 `{ sessionId, force: true }`
+- **一键清空回收站**：回收站展开后新增「清空回收站」，经 `POST /dsh-session-manager/purge-all`
+  一次性永久删除全部条目及磁盘目录；失败条目保留以便重试，响应回报 `purged` / `failed` / `remaining`
 - **更宽的会话 ID 兼容**：不再只接受 `session-<hex>`，`od-<uuid>` 等由其它入口铸造的 ID 也能删除；
   校验规则改为「可安全作为单层路径」（`[A-Za-z0-9][A-Za-z0-9._-]{0,199}`，禁止 `..`）
 
 ### 修复
 
 - **重挂载导致宿主启动崩溃**：`webServer.register()` 对重复 `(kind, path)` 硬抛错，插件重挂载时
-  （配置重载 / 禁用启用 / 服务替换）会重复注册 8 条路由而旧注册未释放，异常沿 `apply()` 逃逸使宿主
+  （配置重载 / 禁用启用 / 服务替换）会重复注册 9 条路由而旧注册未释放，异常沿 `apply()` 逃逸使宿主
   启动失败。现在所有路由经 `installRoute()` 安装到进程级路由表：新挂载先接管（释放旧注册再注册），
   仍冲突只记录告警；`setup()` 失败也被 `apply()` 兜住，插件不激活但宿主继续运行
 - 卸载时释放本代路由（此前 disposer 被丢弃）
 
 ### 测试
 
-- 新增 `tests/route-guard.manual.mjs`：以严格桩 webserver 复现双重挂载，覆盖「重复挂载不抛错」、
-  「路由只装一次」、「卸载释放」、「setup 失败被兜住」、「卸载后重挂载正常」五个场景
+- `tests/route-guard.manual.mjs`：以严格桩 webserver 复现双重挂载，覆盖「重复挂载不抛错」、
+  「9 条路由只装一次」、「卸载释放」、「setup 失败被兜住」、「卸载后重挂载正常」
+
+### 其它
+
+- 插件市场提交文件改为 `market-submission/JeffKeeping__dsh-session-manager.yml`（指向本仓库）
+- 版本号升至 0.4.0
 
 ### 致谢
 

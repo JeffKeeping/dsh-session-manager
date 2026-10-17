@@ -10,6 +10,8 @@ export const DELETE_ROUTE = '/dsh-session-manager/delete'
 export const RESTORE_ROUTE = '/dsh-session-manager/restore'
 /** Permanently purge one session from the trash. */
 export const PURGE_ROUTE = '/dsh-session-manager/purge'
+/** Empty the whole trash: permanently purge every entry. */
+export const PURGE_ALL_ROUTE = '/dsh-session-manager/purge-all'
 /** List the current trash contents. */
 export const TRASH_ROUTE = '/dsh-session-manager/trash'
 /** Reveal a session's log directory in the system file manager. */
@@ -55,4 +57,16 @@ export interface TrashListResponse {
   entries: TrashEntry[]
   /** Maximum entries kept; the oldest overflow is purged automatically. */
   limit: number
+}
+
+/** POST /dsh-session-manager/purge-all response body. */
+export interface PurgeAllResponse {
+  ok: boolean
+  /** Entries whose artifacts were removed. */
+  purged: number
+  /** Session ids that could not be removed; they stay in the trash. */
+  failed: string[]
+  /** Entries still recorded in the trash after the sweep. */
+  remaining: number
+  error?: string
 }
