@@ -62,21 +62,37 @@ Restart the desktop app / `dsh web` afterwards: host plugins and client bundles 
 
 ## Screenshots
 
-The Session Manager section in Settings (workspace groups, row actions, batch delete and trash):
+### 1. Settings · Session Manager
 
-![Settings section](assets/settings-section.png)
+![Session Manager settings section](assets/session-manager-settings.png)
 
-A Session row's "..." menu — the delete entry sits in its own group after "Copy Session ID" (red, destructive):
+- A dedicated **Session Manager** section in the settings navigation
+- Sessions grouped by **workspace** (test1 / test / code) with per-group counts
+- Each row: title and working directory on the left; **Continue / Continue in new chat / Stats / Folder / Delete** on the right. A running session shows "running" and disables Continue
+- Header: **select all**, selected count, **batch delete**; newest/oldest ordering on the right
+- Collapsible footer: **Archived sessions** and **Trash (1/10)** with an **Empty trash** action
 
-![Session row menu](assets/session-menu.png)
+### 2. Session row "..." menu
 
-The Session drawer (same data as the settings page; "More" folds stats / folder / fork):
+![Session row menu](assets/session-row-menu.png)
 
-![Session drawer](assets/session-drawer.png)
+Hover a sidebar session row and open "...": **Pin / Rename (Ctrl+Alt+G) / Fork (Ctrl+Alt+F) / Archive (Ctrl+Shift+A) / Copy Session ID**, then a separator and this plugin's red destructive **Delete this session**.
 
-General Settings — context compaction threshold (17%–90%):
+### 3. Session Manager drawer
+
+![Session Manager drawer](assets/session-manager-drawer.png)
+
+Opened from **Session Manager** in the conversation header; same data source as the settings page:
+
+- Per row: **Continue / More / Delete** — "More" folds Stats, Folder and Fork
+- Running sessions are labelled "running" with disabled controls
+- Footer: **Archived sessions (10)**, **Trash (1/10)** and **Empty trash**
+
+### 4. General settings · compaction threshold
 
 ![Compaction threshold](assets/general-settings.png)
+
+Slider plus numeric input for 17%–90%; effective immediately and applied to every agent preset.
 
 ## Force delete
 
